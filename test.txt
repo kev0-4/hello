@@ -1,0 +1,821 @@
+﻿(Count comments, keywords, identifiers, words, lines, and spaces)
+%{
+#include <stdio.h>
+#include <string.h>
+
+
+FILE *yyin;
+int comment_count=0,keyword_count=0,identifier_count=0,word_count=0,line_count=0,space_count=0;
+char *keywords[] = {"char","int","float","if","else","for","while","return","void","double"};
+
+
+int is_keyword(char *w){
+  for(int i=0;i<10;i++) if(strcmp(w,keywords[i])==0) return 1;
+  return 0;
+}
+%}
+
+
+%%
+"//".*               { comment_count++; line_count++; }
+"/*"(.*|\n)*"*/"     { comment_count++; }
+\n                   { line_count++; }
+[ \t]+               { space_count += yyleng; }
+[a-zA-Z][a-zA-Z0-9]* {
+  word_count++;
+  if(is_keyword(yytext)) keyword_count++;
+  else identifier_count++;
+}
+%%
+int main(int argc,char **argv){
+  yyin=fopen(argv[1],"r");
+  yylex();
+  printf("Comments=%d Keywords=%d Identifiers=%d Words=%d Lines=%d Spaces=%d\n",
+  comment_count,keyword_count,identifier_count,word_count,line_count,space_count);
+  return 0;
+}
+int yywrap(){return 1;}
+
+
+lex exp2.l
+gcc lex.yy.c -o exp2
+./exp2 input.c
+
+
+// This is a comment
+int main() {
+  int a = 5;
+  float b = 2.5;
+  return 0;
+}
+
+
+Experiment 3 – Words Beginning/Ending with ‘A’
+%{
+#include <stdio.h>
+int count=0;
+%}
+[aA][a-zA-Z]*[aA] { count++; printf("%s\n",yytext); }
+.|\n ;
+%%
+int main(){ yylex(); printf("Count:%d\n",count); return 0; }
+int yywrap(){return 1;}
+
+EXECUTION COMMAND
+lex exp3.l
+gcc lex.yy.c -o exp3
+./exp3 < words.txt
+
+SAMPLE INPUT
+Anna apple area data alpha America
+
+
+Experiment 4 – Case Conversion
+%{
+#include <stdio.h>
+%}
+%%
+[a-z] { printf("%c",yytext[0]-32); }
+[A-Z] { printf("%c",yytext[0]+32); }
+. { printf("%c",yytext[0]); }
+%%
+int main(){ yylex(); return 0; }
+int yywrap(){return 1;}
+
+EXECUTION COMMAND
+lex exp4.l
+gcc lex.yy.c -o exp4
+./exp4 < text.txt
+
+SAMPLE INPUT
+Hello World
+
+
+
+
+
+
+
+
+
+
+Experiment 5 – Decimal Conversion
+%{
+#include <stdio.h>
+#include <stdlib.h>
+%}
+%%
+[0-9]+ { int n=atoi(yytext); printf("Decimal:%d Hex:%X\n",n,n); }
+%%
+int main(){ yylex(); return 0; }
+int yywrap(){return 1;}
+
+
+EXECUTION COMMAND
+lex exp5.l
+gcc lex.yy.c -o exp5
+./exp5 < numbers.txt
+
+
+SAMPLE INPUT
+10
+255
+Experiment 6 – Line Pattern Matching (.com / .org / .edu)
+%{
+#include <stdio.h>
+int c=0;
+%}
+%%
+.*com\n { c++; }
+%%
+int main(){ yylex(); printf("Lines ending with .com: %d\n",c); return 0; }
+int yywrap(){return 1;}
+
+
+EXECUTION COMMAND
+lex exp6.l
+gcc lex.yy.c -o exp6
+./exp6 < urls.txt
+
+
+SAMPLE INPUT
+www.google.com
+www.github.org
+www.mit.edu
+
+
+
+
+
+
+Experiment 7 – Postfix Expression Evaluation
+exp7.l
+%{
+#include "y.tab.h"
+#include <stdlib.h>
+%}
+[0-9]+ { yylval = atoi(yytext); return NUMBER; }
+[+\-*/] { return yytext[0]; }
+[ \t\n] ;
+%%
+int yywrap(){return 1;}
+
+
+exp7.y
+%{
+#include <stdio.h>
+#include <stdlib.h>
+int stack[100],top=-1;
+void push(int v){stack[++top]=v;}
+int pop(){return stack[top--];}
+int yylex(void);
+int yyerror(const char*s){printf("Error: %s\n",s);}
+%}
+%token NUMBER
+%%
+E : E E '+' { int a=pop(); int b=pop(); push(b+a); }
+  | E E '-' { int a=pop(); int b=pop(); push(b-a); }
+  | E E '*' { int a=pop(); int b=pop(); push(b*a); }
+  | E E '/' { int a=pop(); int b=pop(); push(b/a); }
+  | NUMBER { push($1); }
+  ;
+%%
+int main(){ printf("Enter postfix: "); yyparse(); printf("Result=%d\n",pop()); }
+
+
+COMMAND:
+lex exp7.l
+yacc -d exp7.y
+gcc lex.yy.c y.tab.c -o exp7
+./exp7
+
+
+SAMPLE INPUT:
+23+5*
+Experiment 8 – Desk Calculator (Lex + Yacc)
+calc.l
+%{
+#include "y.tab.h"
+#include <stdio.h>
+extern int yylval;
+%}
+
+
+digit   [0-9]+
+id      [a-z]
+
+
+%%
+[ \t]+          ;              /* skip whitespace */
+\n              { return '\n'; }
+"="             { return '='; }
+"+"|"-"|"*"|"/" { return yytext[0]; }
+"("             { return '('; }
+")"             { return ')'; }
+{digit}         { yylval = atoi(yytext); return NUMBER; }
+{id}            { yylval = yytext[0] - 'a'; return VARIABLE; }
+.               { return yytext[0]; }
+%%
+
+
+int yywrap(){ return 1; }
+
+
+calc.y
+%{
+#include <stdio.h>
+#include <stdlib.h>
+
+
+int vars[26];
+int yylex(void);
+void yyerror(const char *s){
+    fprintf(stderr,"Error: %s\n",s);
+}
+%}
+
+
+%union {
+  int val;
+}
+
+
+%token <val> NUMBER
+%token <val> VARIABLE
+%left '+' '-'
+%left '*' '/'
+%right UMINUS
+
+
+%type <val> expr
+
+
+%%
+
+
+input:
+    /* empty */
+  | input line
+  ;
+
+
+line:
+    '\n'
+  | expr '\n'          { printf("Result: %d\n",$1); }
+  | VARIABLE '=' expr '\n' { vars[$1] = $3; printf("%c = %d\n", $1+'a', $3); }
+  | error '\n'         { yyerror("syntax error"); yyerrok; }
+  ;
+
+
+expr:
+    NUMBER              { $$ = $1; }
+  | VARIABLE            { $$ = vars[$1]; }
+  | expr '+' expr       { $$ = $1 + $3; }
+  | expr '-' expr       { $$ = $1 - $3; }
+  | expr '*' expr       { $$ = $1 * $3; }
+  | expr '/' expr       {
+                          if($3==0){ yyerror("division by zero"); $$ = 0; }
+                          else $$ = $1 / $3;
+                        }
+  | '-' expr %prec UMINUS { $$ = -$2; }
+  | '(' expr ')'        { $$ = $2; }
+  ;
+%%
+int main(void){
+    printf("Desk Calculator (variables a..z). Type expressions or var=expr, Ctrl+D to exit.\n");
+    yyparse();
+    return 0;
+}
+
+
+COMMAND:
+lex calc.l
+yacc -d calc.y         # produces y.tab.c and y.tab.h
+gcc lex.yy.c y.tab.c -o calc      # add -lfl if needed: gcc lex.yy.c y.tab.c -lfl -o calc
+./calc
+
+
+SAMPLE INPUT:
+a=10
+b=5
+a+b*2
+(a+b)/3
+c= a - b
+c
+
+
+Experiment 9 — Parsers for for, while, switch
+for.l
+%{
+#include "y.tab.h"
+%}
+
+
+%%
+"for"           { return FOR; }
+"("             { return '('; }
+")"             { return ')'; }
+";"             { return ';'; }
+"="             { return '='; }
+"<="|">="|"=="|"<"|">"  { yylval = 0; return RELOP; }  /* simple mapping */
+[a-zA-Z_][a-zA-Z0-9_]*  { yylval = 0; return ID; }
+[0-9]+           { yylval = atoi(yytext); return NUMBER; }
+[ \t\n]+         ;
+.                { return yytext[0]; }
+%%
+int yywrap(){return 1;}
+
+
+for.y
+%{
+#include <stdio.h>
+int yylex(void);
+void yyerror(const char *s){ fprintf(stderr,"Parse error: %s\n",s); }
+%}
+
+
+%token FOR ID NUMBER RELOP
+
+
+%%
+S : FOR '(' INIT ';' COND ';' INCR ')' { printf("Valid FOR loop\n"); }
+  ;
+
+
+INIT : ID '=' NUMBER ;
+COND : ID RELOP NUMBER ;
+INCR : ID '=' ID '+' NUMBER
+     | ID '=' ID
+     ;
+%%
+int main(){ printf("Enter a for loop (example: for(i=0;i<5;i=i+1))\n"); yyparse(); return 0; }
+
+
+COMMAND:
+lex for.l
+yacc -d for.y
+gcc lex.yy.c y.tab.c -o forloop
+./forloop
+
+
+INPUT:
+for(i=0;i<5;i=i+1)
+While.l        
+%{
+#include "y.tab.h"
+%}
+%%
+"while"         { return WHILE; }
+"("             { return '('; }
+")"             { return ')'; }
+"<="|">="|"=="|"<"|">"  { return RELOP; }
+"="             { return '='; }
+";"             { return ';'; }
+[a-zA-Z_][a-zA-Z0-9_]* { return ID; }
+[0-9]+           { yylval = atoi(yytext); return NUMBER; }
+[ \t\n]+         ;
+.                { return yytext[0]; }
+%%
+int yywrap(){return 1;}
+while.y
+%{
+#include <stdio.h>
+int yylex(void);
+void yyerror(const char *s){ fprintf(stderr,"Parse error: %s\n",s); }
+%}
+%token WHILE ID NUMBER RELOP
+
+
+%%
+S : WHILE '(' COND ')' STMT { printf("Valid WHILE loop\n"); }
+  ;
+COND : ID RELOP NUMBER ;
+STMT : ID '=' NUMBER ';' ;
+%%
+int main(){ printf("Enter a while loop (example: while(i<10) i= i+1;)\n"); yyparse(); return 0; }
+
+
+COMMAND:
+lex while.l
+yacc -d while.y
+gcc lex.yy.c y.tab.c -o whileloop
+./whileloop
+
+
+SAMPLE INPUT:
+while(i<10) i= i+1;
+
+
+switch.l
+%{
+#include "y.tab.h"
+%}
+%%
+"switch"        { return SWITCH; }
+"case"          { return CASE; }
+"default"       { return DEFAULT; }
+"break"         { return BREAK; }
+"("             { return '('; }
+")"             { return ')'; }
+"{"             { return '{'; }
+"}"             { return '}'; }
+":"             { return ':'; }
+";"             { return ';'; }
+[0-9]+           { yylval = atoi(yytext); return NUMBER; }
+[a-zA-Z_][a-zA-Z0-9_]* { return ID; }
+[ \t\n]+         ;
+.                { return yytext[0]; }
+%%
+int yywrap(){return 1;}
+switch.y
+%{
+#include <stdio.h>
+int yylex(void);
+void yyerror(const char *s){ fprintf(stderr,"Parse error: %s\n",s); }
+%}
+%token SWITCH CASE DEFAULT BREAK NUMBER ID
+
+
+%%
+S : SWITCH '(' ID ')' '{' CASES DEFAULT_OPT '}' { printf("Valid SWITCH statement\n"); }
+  ;
+CASES : CASES CASE | /* empty */ ;
+CASE  : CASE KEY NUMBER ':' STMT_LIST BREAK ';' ;
+KEY   : /* placeholder */ ;
+STMT_LIST : STMT_LIST STMT | STMT ;
+STMT  : ID '=' NUMBER ';' | ID ';' ;
+DEFAULT_OPT : DEFAULT ':' STMT | /* empty */ ;
+%%
+int main(){ printf("Enter a switch statement (simple form)\n"); yyparse(); return 0; }
+COMMAND:
+lex switch.l
+yacc -d switch.y
+gcc lex.yy.c y.tab.c -o switchparser
+./switchparser
+SAMPLE INPUT:
+switch(x){ case 1: y=2; break; default: y=0; }
+
+
+
+
+YACC Program for Checking Syntax of IF-THEN
+ifthen.l
+%{
+#include "y.tab.h"
+%}
+%%
+"if"      { return IF; }
+"then"    { return THEN; }
+"("       { return '('; }
+")"       { return ')'; }
+[a-zA-Z_][a-zA-Z0-9_]*  { return ID; }
+"="       { return '='; }
+";"       { return ';'; }
+[ \t\n]+  ;
+.         { return yytext[0]; }
+%%
+int yywrap(){return 1;}
+ifthen.y
+%{
+#include <stdio.h>
+int yylex(void);
+void yyerror(const char*s){ printf("Invalid Syntax: %s\n",s); }
+%}
+%token IF THEN ID
+%%
+S : IF '(' COND ')' THEN STMT { printf("Valid IF-THEN statement\n"); }
+  ;
+COND : ID '=' ID ;
+STMT : ID '=' ID ';' ;
+%%
+int main(){
+ printf("Enter IF-THEN statement:\n");
+ yyparse();
+ return 0;
+}
+
+
+
+
+COMMAND:
+lex ifthen.l
+yacc -d ifthen.y
+gcc lex.yy.c y.tab.c -o ifthen
+./ifthen
+SAMPLE INPUT:
+if(x=y) then z=a;
+
+
+YACC Program for IF-THEN-ELSE
+ifelse.l
+%{
+#include "y.tab.h"
+%}
+%%
+"if"      { return IF; }
+"then"    { return THEN; }
+"else"    { return ELSE; }
+"("       { return '('; }
+")"       { return ')'; }
+[a-zA-Z_][a-zA-Z0-9_]*  { return ID; }
+"="       { return '='; }
+";"       { return ';'; }
+[ \t\n]+  ;
+.         { return yytext[0]; }
+%%
+int yywrap(){return 1;}
+
+
+ifelse.y
+%{
+#include <stdio.h>
+int yylex(void);
+void yyerror(const char*s){ printf("Syntax Error: %s\n",s); }
+%}
+%token IF THEN ELSE ID
+%%
+S : IF '(' COND ')' THEN STMT ELSE STMT { printf("Valid IF-THEN-ELSE\n"); } ;
+COND : ID '=' ID ;
+STMT : ID '=' ID ';' ;
+%%
+int main(){ printf("Enter IF-THEN-ELSE statement:\n"); yyparse(); return 0; }
+COMMANDS:
+lex ifelse.l
+yacc -d ifelse.y
+gcc lex.yy.c y.tab.c -o ifelse
+./ifelse
+SAMPLE INPUT:
+if(x=y) then z=a; else z=b;
+
+
+YACC Program for Checking Custom Function Syntax
+Func.l
+%{
+#include "y.tab.h"
+%}
+%%
+"int"|"float"|"void" { return TYPE; }
+[a-zA-Z_][a-zA-Z0-9_]* { return ID; }
+"(" { return '('; }
+")" { return ')'; }
+"{" { return '{'; }
+"}" { return '}'; }
+";" { return ';'; }
+[ \t\n]+ ;
+%%
+int yywrap(){return 1;}
+func.y
+%{
+#include <stdio.h>
+int yylex(void);
+void yyerror(const char*s){ printf("Invalid Function Syntax: %s\n",s); }
+%}
+%token TYPE ID
+%%
+S : TYPE ID '(' ')' '{' BODY '}' { printf("Valid Function Definition\n"); } ;
+BODY : STMT_LIST ;
+STMT_LIST : STMT_LIST STMT | STMT ;
+STMT : ID ';' | ;
+%%
+int main(){
+ printf("Enter Function Definition:\n");
+ yyparse();
+ return 0;
+}
+COMMANDS:
+lex func.l
+yacc -d func.y
+gcc lex.yy.c y.tab.c -o func
+./func
+SAMPLE INPUT:
+int main() { x; y; }
+
+
+
+Experiment 10 — Intermediate Code Generation (Arithmetic expressions → three-address code)
+arith.l
+%{
+#include "y.tab.h"
+#include <stdlib.h>
+%}
+%%
+[ \t\n]+     ;
+[0-9]+       { yylval.str = strdup(yytext); return NUMBER; }
+[a-zA-Z_][a-zA-Z0-9_]* { yylval.str = strdup(yytext); return ID; }
+"+"          { return '+'; }
+"-"          { return '-'; }
+"*"          { return '*'; }
+"/"          { return '/'; }
+"("          { return '('; }
+")"          { return ')'; }
+";"          { return ';'; }
+.            { return yytext[0]; }
+%%
+int yywrap(){return 1;}
+
+
+arith.y
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+int tempno=0;
+char* newtemp(){
+  char buf[32]; sprintf(buf,"t%d",++tempno); return strdup(buf);
+}
+%}
+%union {
+  char *str;
+}
+%token <str> NUMBER ID
+%type <str> E
+
+
+%left '+' '-'
+%left '*' '/'
+
+
+%%
+program:
+  stmt_list
+  ;
+stmt_list:
+  stmt_list stmt
+  | /* empty */
+  ;
+stmt:
+  E ';' { free($1); }
+  ;
+E:
+    NUMBER { $$ = $1; }
+  | ID     { $$ = $1; }
+  | E '+' E { char *t = newtemp(); printf("%s = %s + %s\n", t, $1, $3); free($1); free($3); $$ = t; }
+  | E '-' E { char *t = newtemp(); printf("%s = %s - %s\n", t, $1, $3); free($1); free($3); $$ = t; }
+  | E '*' E { char *t = newtemp(); printf("%s = %s * %s\n", t, $1, $3); free($1); free($3); $$ = t; }
+  | E '/' E { char *t = newtemp(); printf("%s = %s / %s\n", t, $1, $3); free($1); free($3); $$ = t; }
+  | '(' E ')' { $$ = $2; }
+  ;
+%%
+int main(){ printf("Enter expressions ended by semicolon (e.g. a+b*c;)\n"); yyparse(); return 0; }
+int yyerror(const char *s){ fprintf(stderr,"Error: %s\n",s); return 0; }
+
+
+COMMAND:
+lex arith.l
+yacc -d arith.y
+gcc lex.yy.c y.tab.c -o icg
+./icg
+
+
+SAMPLE INPUT:
+a+b*c;
+(a+b)*c;
+
+
+
+
+
+Experiment 11 — Simple Lex-only Calculator
+Exp11.l
+%{
+#include <stdio.h>
+#include <stdlib.h>
+
+
+int compute_simple(const char *s){
+    int a=0,b=0;
+    char op=0;
+    if(sscanf(s,"%d %c %d",&a,&op,&b) >= 2){
+      switch(op){
+        case '+': return a+b;
+        case '-': return a-b;
+        case '*': return a*b;
+        case '/': return b? a/b : 0;
+      }
+    }
+    return 0;
+}
+%}
+
+
+%%
+[0-9]+[ \t]*[+\-*/][ \t]*[0-9]+.*    {
+    int r = compute_simple(yytext);
+    printf("Result=%d\n", r);
+}
+[ \t\n]+    ;
+.           { /* ignore */ }
+%%
+int yywrap(){return 1;}
+
+
+int main(void){
+    printf("Lex calculator (simple). Enter lines like: 10+5\n");
+    yylex();
+    return 0;
+}
+
+
+COMMAND:
+lex exp11.l
+gcc lex.yy.c -o exp11
+./exp11
+
+SAMPLE INPUT:
+10+5
+7 * 6
+20/4
+
+
+
+
+
+
+LEX Program to Check Valid Email
+
+%{
+#include <stdio.h>
+int valid=0;
+%}
+%%
+[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,} { valid=1; }
+%%
+int main(){
+ printf("Enter email: ");
+ yylex();
+ if(valid) printf("Valid email address\n");
+ else printf("Invalid email address\n");
+ return 0;
+}
+int yywrap(){return 1;}
+COMMAND:
+lex email.l
+gcc lex.yy.c -o email
+./email
+
+
+SAMPLE INPUT:
+test@gmail.com
+
+
+LEX Program for All Domain Emails
+%{
+#include <stdio.h>
+int valid=0;
+%}
+%%
+[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|edu|net|gov) { valid=1; }
+%%
+int main(){ printf("Enter email: "); yylex(); if(valid) printf("Valid Domain Email\n"); else printf("Invalid Domain\n"); return 0; }
+int yywrap(){return 1;}
+
+
+COMMAND:
+lex domain.l
+gcc lex.yy.c -o domain
+./domain
+
+
+SAMPLE INPUT:
+user@mit.edu
+
+
+
+
+
+
+
+
+
+
+LEX Email Validation (File Handling)
+%{
+#include <stdio.h>
+FILE *yyin;
+int valid=0;
+%}
+%%
+[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|org|edu|net|gov) { valid++; }
+%%
+int main(int argc,char *argv[]){
+ if(argc!=2){ printf("Usage:%s <file>\n",argv[0]); return 1; }
+ yyin=fopen(argv[1],"r");
+ if(!yyin){ printf("Error opening file\n"); return 1; }
+ yylex();
+ printf("Valid Emails Found:%d\n",valid);
+ fclose(yyin);
+ return 0;
+}
+int yywrap(){return 1;}
+
+
+COMMAND:
+lex emailfile.l
+gcc lex.yy.c -o emailfile
+./emailfile emails.txt
+
+
+SAMPLE INPUT:
+test@gmail.com
+invalid.email@abc
+user@harvard.edu
