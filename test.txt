@@ -144,7 +144,25 @@ www.github.org
 www.mit.edu
 
 
-
+Decimal → Binary
+%{
+#include <stdio.h>
+#include <stdlib.h>
+void decimal_to_binary(int n){
+    int bin[32],i=0; int orig=n;
+    while(n>0){ bin[i++]=n%2; n/=2; }
+    printf("Decimal %d = Binary ",orig);
+    for(int j=i-1;j>=0;j--) printf("%d",bin[j]);
+    printf("\n");
+}
+%}
+%%
+[0-9]+ { int dec=atoi(yytext); decimal_to_binary(dec); }
+[ \t\n]+ ;
+. { printf("Invalid:%s\n",yytext); }
+%%
+int main(){ yylex(); return 0; }
+int yywrap(){return 1;}
 
 
 
